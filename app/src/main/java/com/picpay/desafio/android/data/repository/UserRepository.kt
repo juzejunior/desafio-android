@@ -1,35 +1,25 @@
 package com.picpay.desafio.android.data.repository
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.Transformations
 import com.picpay.desafio.android.data.api.ApiService
-import com.picpay.desafio.android.data.api.callback
+import com.picpay.desafio.android.data.database.UserDatabase
+import com.picpay.desafio.android.data.database.entity.asDomainModel
 import com.picpay.desafio.android.model.User
+import com.picpay.desafio.android.model.asDatabaseModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import retrofit2.await
 
-class UserRepository () {
-      fun getUsers(onSuccess: (users: List<User>) -> Unit, onError: () -> Unit) {
-          val call = ApiService.getService().getUsers()
-          call.enqueue(callback({response ->
-              response?.body()?.let {
-                  val users: List<User> = it
-                  onSuccess(users)
-              }
-          }, {
-              onError()
-          }))
+class UserRepository (private val database: UserDatabase) {
 
-          /*api.getService().getUsers().enqueue(object : Callback<List<User>> {
-           override fun onFailure(call: Call<List<User>>, t: Throwable) {
-               onError()
-               /*val message = getString(R.string.error)
-               progressBar.visibility = View.GONE
-               recyclerView.visibility = View.GONE
-               Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT)
-                   .show()*/
-           }
+    val users: LiveData<List<User>> = Transformations.map(database.userDao.getUsers()) {
+        it.asDomainModel()
+    }
 
-           override fun onResponse(call: Call<List<User>>, response: Response<List<User>>) {
-             /*  progressBar.visibility = View.GONE
-               adapter.users = response.body()!!*/
-               //return response.body() as List<User>
-
-           }*/
-   }
+    suspend fun refreshUsers() {
+        withContext(Dispatchers.IO) {
+            val users = ApiService.getService().getUsers().await()
+            database.userDao.insertAll(users.asDatabaseModel())
+        }
+    }
 }
